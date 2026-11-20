@@ -5,17 +5,17 @@
         <div class="card mb-4">
             <div class="card-header card-header-ff py-3 px-4">
                 <h5 class="mb-0">Track Your IT Ticket</h5>
-                <small class="opacity-75">Enter your Ticket Reference ID and work email to view live progress.</small>
+                <small class="opacity-75">Enter your Ticket Reference ID and work email to view live progress or send an update.</small>
             </div>
             <div class="card-body p-4">
                 <form method="POST">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Ticket Reference ID *</label>
-                        <input type="text" name="ticket_code" class="form-control" placeholder="e.g. IDL-1001" required>
+                        <input type="text" name="ticket_code" class="form-control" placeholder="e.g. IDL-1001" value="{{ ticket['ticket_code'] if ticket else '' }}" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Work Email Used *</label>
-                        <input type="email" name="staff_email" class="form-control" placeholder="name@idlgroup.com.ng" required>
+                        <input type="email" name="staff_email" class="form-control" placeholder="name@idlgroup.com.ng" value="{{ ticket['staff_email'] if ticket else '' }}" required>
                     </div>
                     <button type="submit" class="btn btn-ff-primary w-100 py-2">Check Status</button>
                 </form>
@@ -33,8 +33,8 @@
                         </span>
                     </div>
                     <p class="text-muted small mb-3">Submitted: {{ ticket['created_at'] }} • Last Updated: {{ ticket['updated_at'] }}</p>
-                    <p class="mb-2"><strong>Issue Reported:</strong></p>
-                    <p class="p-3 rounded-3 mb-3" style="background-color: var(--ff-pastel-bg);">{{ ticket['description'] }}</p>
+                    <p class="mb-2"><strong>Issue Log & Conversation:</strong></p>
+                    <div class="p-3 rounded-3 mb-3" style="background-color: var(--ff-pastel-bg); white-space: pre-line;">{{ ticket['description'] }}</div>
 
                     {% if ticket['attachment'] %}
                     <div class="mb-3">
@@ -50,9 +50,20 @@
 
                     <hr>
                     <p class="mb-1"><strong>IT Support Update / Resolution Notes:</strong></p>
-                    <div class="p-3 bg-light rounded-3">
+                    <div class="p-3 bg-light rounded-3 mb-4">
                         {{ ticket['resolution_notes'] if ticket['resolution_notes'] else 'Your ticket is in our queue. An IDL IT officer will update this shortly.' }}
                     </div>
+
+                    {% if ticket['status'] != 'Resolved' %}
+                    <hr>
+                    <form method="POST" action="{{ url_for('track_reply') }}">
+                        <input type="hidden" name="ticket_code" value="{{ ticket['ticket_code'] }}">
+                        <input type="hidden" name="staff_email" value="{{ ticket['staff_email'] }}">
+                        <label class="form-label fw-semibold">Need to Add Extra Information for IT?</label>
+                        <textarea name="followup_note" class="form-control mb-2" rows="2" placeholder="Share an update or answer an IT question..." required></textarea>
+                        <button type="submit" class="btn btn-sm btn-ff-green">Send Follow-Up to IT</button>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
             {% else %}

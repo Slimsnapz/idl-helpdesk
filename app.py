@@ -53,12 +53,28 @@ def allowed_file(filename):
 
 
 def build_email_message(
-    to_email, subject, text_body, html_body=None, attachment_path=None
+    to_email,
+    subject,
+    text_body,
+    html_body=None,
+    attachment_path=None,
+    reply_to=None,
+    message_id=None,
+    in_reply_to=None,
 ):
   msg = EmailMessage()
   msg["Subject"] = subject
   msg["From"] = f"IDL IT Support <{SMTP_USER}>"
   msg["To"] = to_email
+
+  if reply_to:
+    msg["Reply-To"] = reply_to
+  if message_id:
+    msg["Message-ID"] = message_id
+  if in_reply_to:
+    msg["In-Reply-To"] = in_reply_to
+    msg["References"] = in_reply_to
+
   msg.set_content(text_body)
 
   if html_body:
@@ -81,11 +97,25 @@ def build_email_message(
 
 
 def send_email_sync(
-    to_email, subject, text_body, html_body=None, attachment_path=None
+    to_email,
+    subject,
+    text_body,
+    html_body=None,
+    attachment_path=None,
+    reply_to=None,
+    message_id=None,
+    in_reply_to=None,
 ):
   """Synchronous send used for SMTP configuration verification."""
   msg = build_email_message(
-      to_email, subject, text_body, html_body, attachment_path
+      to_email,
+      subject,
+      text_body,
+      html_body=html_body,
+      attachment_path=attachment_path,
+      reply_to=reply_to,
+      message_id=message_id,
+      in_reply_to=in_reply_to,
   )
   with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15) as server:
     server.starttls()
@@ -94,7 +124,14 @@ def send_email_sync(
 
 
 def send_email_async(
-    to_email, subject, text_body, html_body=None, attachment_path=None
+    to_email,
+    subject,
+    text_body,
+    html_body=None,
+    attachment_path=None,
+    reply_to=None,
+    message_id=None,
+    in_reply_to=None,
 ):
   """Background send so ticket submission stays instantaneous for staff."""
   if not MAIL_ENABLED or not to_email or not SMTP_USER or not SMTP_PASSWORD:
@@ -102,7 +139,16 @@ def send_email_async(
 
   def _send():
     try:
-      send_email_sync(to_email, subject, text_body, html_body, attachment_path)
+      send_email_sync(
+          to_email,
+          subject,
+          text_body,
+          html_body=html_body,
+          attachment_path=attachment_path,
+          reply_to=reply_to,
+          message_id=message_id,
+          in_reply_to=in_reply_to,
+      )
     except Exception as e:
       print(f"[Email Error] Failed to send to {to_email}: {e}")
 
@@ -244,11 +290,12 @@ def index():
     )
     db.commit()
 
-    # 1. Notify IT Support Inbox (with full details + attached screenshot if uploaded)
+    # 1. Notify IT Support Inbox (Reply-To points directly to staff_email)
     admin_url = url_for("admin", _external=True)
     it_subject = (
         f"[{ticket_code}] {priority} Priority — {category} ({location})"
     )
+    it_thread_id = f"<{ticket_code.lower()}-it@idlgroup.com.ng>"
     it_text_body = (
         "New IT Support Ticket Logged at Integrated Dairies Limited (IDL)\n"
         "================================================================\n"
@@ -326,11 +373,14 @@ def index():
         it_text_body,
         html_body=it_html_body,
         attachment_path=saved_filepath,
+        reply_to=staff_email,
+        message_id=it_thread_id,
     )
 
-    # 2. Send Confirmation Receipt to Staff Member
+    # 2. Send Confirmation Receipt to Staff Member (Anchored Message-ID for threading)
     track_url = url_for("track", _external=True)
-    staff_subject = f"[{ticket_code}] We received your IDL IT Support request"
+    staff_subject = f"[{ticket_code}] IDL IT Support: We received your request"
+    staff_thread_id = f"<{ticket_code.lower()}-staff@idlgroup.com.ng>"
     staff_text_body = (
         f"Hi {staff_name},\n\n"
         "Thanks for reaching out! Your IT support request has been logged and"
@@ -339,13 +389,21 @@ def index():
         f"Category: {category}\n"
         f"Priority: {priority}\n"
         f"Description: {description}\n\n"
-        f"You can check live updates anytime at:\n{track_url}\n"
+        f"Track progress or send a follow-up update on the portal:\n{track_url}\n"
         f"(Use Ticket ID {ticket_code} and {staff_email})\n\n"
+        "Need to send urgent extra details by email? You can reply directly to"
+        " this thread and it will route to the IDL IT Support inbox.\n\n"
         "Warm regards,\n"
         "IT Support Team\n"
         "Integrated Dairies Limited (IDL)"
     )
-    send_email_async(staff_email, staff_subject, staff_text_body)
+    send_email_async(
+        staff_email,
+        staff_subject,
+        staff_text_body,
+        reply_to=IT_ALERT_EMAIL,
+        message_id=staff_thread_id,
+    )
 
     return render_template(
         "index.html", submitted_code=ticket_code, staff_email=staff_email
@@ -368,6 +426,63 @@ def track():
         (ticket_code, staff_email),
     ).fetchone()
   return render_template("track.html", ticket=ticket, searched=searched)
+
+
+@app.route("/track/reply", methods=["POST"])
+def track_reply():
+  ticket_code = request.form["ticket_code"].strip().upper()
+  staff_email = request.form["staff_email"].strip().lower()
+  followup_note = request.form["followup_note"].strip()
+
+  db = get_db()
+  ticket = db.execute(
+      "SELECT * FROM tickets WHERE ticket_code = ? AND staff_email = ?",
+      (ticket_code, staff_email),
+  ).fetchone()
+
+  if ticket and followup_note:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    updated_description = (
+        f"{ticket['description']}\n\n--- Staff Follow-Up ({now})"
+        f" ---\n{followup_note}"
+    )
+    db.execute(
+        "UPDATE tickets SET description = ?, updated_at = ? WHERE id = ?",
+        (updated_description, now, ticket["id"]),
+    )
+    db.commit()
+
+    # Thread the staff follow-up directly into the IT alert email conversation
+    admin_url = url_for("admin", _external=True)
+    it_subject = (
+        f"Re: [{ticket_code}] {ticket['priority']} Priority —"
+        f" {ticket['category']} ({ticket['location']})"
+    )
+    it_thread_id = f"<{ticket_code.lower()}-it@idlgroup.com.ng>"
+    it_body = (
+        f"Staff Follow-Up Added on Ticket {ticket_code}\n"
+        "============================================\n"
+        f"From: {ticket['staff_name']} ({staff_email})\n"
+        f"Current Status: {ticket['status']}\n\n"
+        f"Follow-Up Message:\n{followup_note}\n\n"
+        f"Open in Command Center: {admin_url}\n"
+    )
+    send_email_async(
+        IT_ALERT_EMAIL,
+        it_subject,
+        it_body,
+        reply_to=staff_email,
+        in_reply_to=it_thread_id,
+    )
+
+    flash("Your follow-up note has been added and sent to IT Support.", "success")
+    ticket = db.execute(
+        "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)
+    ).fetchone()
+    return render_template("track.html", ticket=ticket, searched=True)
+
+  flash("Could not submit follow-up note. Please verify your details.", "danger")
+  return redirect(url_for("track"))
 
 
 # --- IT ADMIN ROUTES ---
@@ -568,21 +683,41 @@ def update_ticket(ticket_id):
     )
     db.commit()
 
+    # Same Subject (with Re:) + matching In-Reply-To keeps all updates in ONE email thread
     track_url = url_for("track", _external=True)
-    subject = f"[{ticket['ticket_code']}] Ticket Status Updated: {new_status}"
+    staff_subject = (
+        f"Re: [{ticket['ticket_code']}] IDL IT Support: We received your request"
+    )
+    staff_thread_id = f"<{ticket['ticket_code'].lower()}-staff@idlgroup.com.ng>"
+
+    reply_guidance = (
+        "Our IT team is actively working on this. You can post a follow-up"
+        " note on the portal or reply directly to this email thread if we"
+        " need more details.\n\n"
+        if new_status == "In Progress"
+        else ""
+    )
+
     body = (
         f"Hi {ticket['staff_name']},\n\n"
         f"Your IDL IT Support ticket ({ticket['ticket_code']}) has been"
         " updated.\n\n"
-        f"New Status: {new_status}\n"
+        f"Current Status: {new_status}\n"
         "IT Support Notes:"
         f" {resolution_notes or 'No additional notes provided.'}\n\n"
-        f"View full ticket details at: {track_url}\n\n"
+        f"{reply_guidance}"
+        f"View or respond on the portal: {track_url}\n\n"
         "Warm regards,\n"
         "IT Support Team\n"
         "Integrated Dairies Limited (IDL)"
     )
-    send_email_async(ticket["staff_email"], subject, body)
+    send_email_async(
+        ticket["staff_email"],
+        staff_subject,
+        body,
+        reply_to=IT_ALERT_EMAIL,
+        in_reply_to=staff_thread_id,
+    )
     flash(f"Ticket {ticket['ticket_code']} updated and staff notified.", "success")
 
   return redirect(url_for("admin"))

@@ -106,7 +106,6 @@ def send_email_sync(
     message_id=None,
     in_reply_to=None,
 ):
-  """Synchronous send used for SMTP configuration verification."""
   msg = build_email_message(
       to_email,
       subject,
@@ -133,7 +132,6 @@ def send_email_async(
     message_id=None,
     in_reply_to=None,
 ):
-  """Background send so ticket submission stays instantaneous for staff."""
   if not MAIL_ENABLED or not to_email or not SMTP_USER or not SMTP_PASSWORD:
     return
 
@@ -193,6 +191,18 @@ def init_db():
                 resolved_at TEXT DEFAULT ''
             )
         """)
+    db.execute("""
+            CREATE TABLE IF NOT EXISTS ticket_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                sender_role TEXT NOT NULL,
+                sender_name TEXT NOT NULL,
+                message TEXT NOT NULL,
+                status_change TEXT DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (ticket_id) REFERENCES tickets (id)
+            )
+        """)
     existing_cols = [
         row["name"]
         for row in db.execute("PRAGMA table_info(tickets)").fetchall()
@@ -238,7 +248,6 @@ def index():
     description = request.form["description"].strip()
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    # Handle optional screenshot/photo upload
     attachment_filename = ""
     saved_filepath = None
     file = request.files.get("screenshot")
@@ -290,11 +299,12 @@ def index():
     )
     db.commit()
 
-    # 1. Notify IT Support Inbox (Reply-To points directly to staff_email)
+    # Unified subject line so human replies and automated updates stay in one thread
+    base_subject = f"[{ticket_code}] IDL IT Support — {category}"
+
+    # 1. Notify IT Support Inbox
     admin_url = url_for("admin", _external=True)
-    it_subject = (
-        f"[{ticket_code}] {priority} Priority — {category} ({location})"
-    )
+    it_subject = f"{base_subject} ({priority} • {location})"
     it_thread_id = f"<{ticket_code.lower()}-it@idlgroup.com.ng>"
     it_text_body = (
         "New IT Support Ticket Logged at Integrated Dairies Limited (IDL)\n"
@@ -377,9 +387,8 @@ def index():
         message_id=it_thread_id,
     )
 
-    # 2. Send Confirmation Receipt to Staff Member (Anchored Message-ID for threading)
+    # 2. Send Confirmation Receipt to Staff Member
     track_url = url_for("track", _external=True)
-    staff_subject = f"[{ticket_code}] IDL IT Support: We received your request"
     staff_thread_id = f"<{ticket_code.lower()}-staff@idlgroup.com.ng>"
     staff_text_body = (
         f"Hi {staff_name},\n\n"
@@ -389,17 +398,17 @@ def index():
         f"Category: {category}\n"
         f"Priority: {priority}\n"
         f"Description: {description}\n\n"
-        f"Track progress or send a follow-up update on the portal:\n{track_url}\n"
+        f"View live progress or post follow-up updates on the portal:\n{track_url}\n"
         f"(Use Ticket ID {ticket_code} and {staff_email})\n\n"
-        "Need to send urgent extra details by email? You can reply directly to"
-        " this thread and it will route to the IDL IT Support inbox.\n\n"
+        "You can also reply directly to this email thread if you need to share"
+        " extra details with IT.\n\n"
         "Warm regards,\n"
         "IT Support Team\n"
         "Integrated Dairies Limited (IDL)"
     )
     send_email_async(
         staff_email,
-        staff_subject,
+        base_subject,
         staff_text_body,
         reply_to=IT_ALERT_EMAIL,
         message_id=staff_thread_id,
@@ -415,6 +424,7 @@ def index():
 @app.route("/track", methods=["GET", "POST"])
 def track():
   ticket = None
+  messages = []
   searched = False
   if request.method == "POST":
     searched = True
@@ -425,7 +435,14 @@ def track():
         "SELECT * FROM tickets WHERE ticket_code = ? AND staff_email = ?",
         (ticket_code, staff_email),
     ).fetchone()
-  return render_template("track.html", ticket=ticket, searched=searched)
+    if ticket:
+      messages = db.execute(
+          "SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC",
+          (ticket["id"],),
+      ).fetchall()
+  return render_template(
+      "track.html", ticket=ticket, messages=messages, searched=searched
+  )
 
 
 @app.route("/track/reply", methods=["POST"])
@@ -440,23 +457,25 @@ def track_reply():
       (ticket_code, staff_email),
   ).fetchone()
 
-  if ticket and followup_note:
+  if ticket and followup_note and ticket["status"] != "Resolved":
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    updated_description = (
-        f"{ticket['description']}\n\n--- Staff Follow-Up ({now})"
-        f" ---\n{followup_note}"
+    db.execute(
+        """
+            INSERT INTO ticket_messages (ticket_id, sender_role, sender_name, message, status_change, created_at)
+            VALUES (?, 'Staff', ?, ?, '', ?)
+        """,
+        (ticket["id"], ticket["staff_name"], followup_note, now),
     )
     db.execute(
-        "UPDATE tickets SET description = ?, updated_at = ? WHERE id = ?",
-        (updated_description, now, ticket["id"]),
+        "UPDATE tickets SET updated_at = ? WHERE id = ?", (now, ticket["id"])
     )
     db.commit()
 
     # Thread the staff follow-up directly into the IT alert email conversation
     admin_url = url_for("admin", _external=True)
     it_subject = (
-        f"Re: [{ticket_code}] {ticket['priority']} Priority —"
-        f" {ticket['category']} ({ticket['location']})"
+        f"Re: [{ticket_code}] IDL IT Support — {ticket['category']}"
+        f" ({ticket['priority']} • {ticket['location']})"
     )
     it_thread_id = f"<{ticket_code.lower()}-it@idlgroup.com.ng>"
     it_body = (
@@ -475,11 +494,17 @@ def track_reply():
         in_reply_to=it_thread_id,
     )
 
-    flash("Your follow-up note has been added and sent to IT Support.", "success")
+    flash("Your follow-up note has been added to the ticket thread.", "success")
     ticket = db.execute(
         "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)
     ).fetchone()
-    return render_template("track.html", ticket=ticket, searched=True)
+    messages = db.execute(
+        "SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC",
+        (ticket["id"],),
+    ).fetchall()
+    return render_template(
+        "track.html", ticket=ticket, messages=messages, searched=True
+    )
 
   flash("Could not submit follow-up note. Please verify your details.", "danger")
   return redirect(url_for("track"))
@@ -512,7 +537,8 @@ def logout():
 @app.route("/admin")
 @admin_required
 def admin():
-  status_filter = request.args.get("status", "All")
+  # Default to 'Active' (Open + In Progress) so Resolved tickets move to the Archive tab
+  status_filter = request.args.get("status", "Active")
   location_filter = request.args.get("location", "All")
   category_filter = request.args.get("category", "All")
 
@@ -520,7 +546,9 @@ def admin():
   query = "SELECT * FROM tickets WHERE 1=1"
   params = []
 
-  if status_filter != "All":
+  if status_filter == "Active":
+    query += " AND status != 'Resolved'"
+  elif status_filter != "All":
     query += " AND status = ?"
     params.append(status_filter)
 
@@ -546,7 +574,23 @@ def admin():
       hours_open = 0
     t["hours_open"] = hours_open
     t["is_overdue"] = t["status"] != "Resolved" and hours_open >= 24
+    t["messages"] = []
     tickets.append(t)
+
+  # Load conversation thread messages for all displayed tickets
+  if tickets:
+    ticket_ids = [t["id"] for t in tickets]
+    placeholders = ",".join("?" for _ in ticket_ids)
+    msg_rows = db.execute(
+        f"SELECT * FROM ticket_messages WHERE ticket_id IN ({placeholders})"
+        " ORDER BY id ASC",
+        ticket_ids,
+    ).fetchall()
+    msgs_by_ticket = {}
+    for m in msg_rows:
+      msgs_by_ticket.setdefault(m["ticket_id"], []).append(dict(m))
+    for t in tickets:
+      t["messages"] = msgs_by_ticket.get(t["id"], [])
 
   locations = [
       row["location"]
@@ -601,6 +645,7 @@ def admin():
 
   stats = {
       "total": total_count,
+      "active": open_count + in_progress_count,
       "open": open_count,
       "in_progress": in_progress_count,
       "resolved": resolved_count,
@@ -655,7 +700,7 @@ def admin():
 @admin_required
 def update_ticket(ticket_id):
   new_status = request.form["status"]
-  resolution_notes = request.form["resolution_notes"].strip()
+  resolution_notes = request.form.get("resolution_notes", "").strip()
   now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
   db = get_db()
@@ -673,20 +718,37 @@ def update_ticket(ticket_id):
     else:
       resolved_at = ""
 
+    latest_note = (
+        resolution_notes if resolution_notes else ticket["resolution_notes"]
+    )
     db.execute(
         """
             UPDATE tickets 
             SET status = ?, resolution_notes = ?, updated_at = ?, resolved_at = ?
             WHERE id = ?
         """,
-        (new_status, resolution_notes, now, resolved_at, ticket_id),
+        (new_status, latest_note, now, resolved_at, ticket_id),
+    )
+
+    # Record entry in the chronological thread
+    thread_msg = (
+        resolution_notes
+        if resolution_notes
+        else f"Ticket status changed to {new_status}."
+    )
+    db.execute(
+        """
+            INSERT INTO ticket_messages (ticket_id, sender_role, sender_name, message, status_change, created_at)
+            VALUES (?, 'IT Support', 'IDL IT Team', ?, ?, ?)
+        """,
+        (ticket_id, thread_msg, new_status, now),
     )
     db.commit()
 
-    # Same Subject (with Re:) + matching In-Reply-To keeps all updates in ONE email thread
+    # Keep all status updates inside the same staff email thread
     track_url = url_for("track", _external=True)
     staff_subject = (
-        f"Re: [{ticket['ticket_code']}] IDL IT Support: We received your request"
+        f"Re: [{ticket['ticket_code']}] IDL IT Support — {ticket['category']}"
     )
     staff_thread_id = f"<{ticket['ticket_code'].lower()}-staff@idlgroup.com.ng>"
 
@@ -703,10 +765,9 @@ def update_ticket(ticket_id):
         f"Your IDL IT Support ticket ({ticket['ticket_code']}) has been"
         " updated.\n\n"
         f"Current Status: {new_status}\n"
-        "IT Support Notes:"
-        f" {resolution_notes or 'No additional notes provided.'}\n\n"
+        f"IT Support Update: {thread_msg}\n\n"
         f"{reply_guidance}"
-        f"View or respond on the portal: {track_url}\n\n"
+        f"View full ticket conversation on the portal: {track_url}\n\n"
         "Warm regards,\n"
         "IT Support Team\n"
         "Integrated Dairies Limited (IDL)"
@@ -718,7 +779,19 @@ def update_ticket(ticket_id):
         reply_to=IT_ALERT_EMAIL,
         in_reply_to=staff_thread_id,
     )
-    flash(f"Ticket {ticket['ticket_code']} updated and staff notified.", "success")
+
+    if new_status == "Resolved":
+      flash(
+          f"Ticket {ticket['ticket_code']} marked Resolved and moved to the"
+          " Resolved Archive.",
+          "success",
+      )
+    else:
+      flash(
+          f"Ticket {ticket['ticket_code']} updated ({new_status}) and staff"
+          " notified.",
+          "success",
+      )
 
   return redirect(url_for("admin"))
 
@@ -770,7 +843,9 @@ def export_csv():
   query = "SELECT * FROM tickets WHERE 1=1"
   params = []
 
-  if status_filter != "All":
+  if status_filter == "Active":
+    query += " AND status != 'Resolved'"
+  elif status_filter != "All":
     query += " AND status = ?"
     params.append(status_filter)
 
@@ -798,7 +873,7 @@ def export_csv():
       "Priority",
       "Status",
       "Description",
-      "Resolution Notes",
+      "Latest Resolution Notes",
       "Created At",
       "Updated At",
       "Resolved At",

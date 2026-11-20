@@ -33,7 +33,8 @@
                         </span>
                     </div>
                     <p class="text-muted small mb-3">Submitted: {{ ticket['created_at'] }} • Last Updated: {{ ticket['updated_at'] }}</p>
-                    <p class="mb-2"><strong>Issue Log & Conversation:</strong></p>
+
+                    <p class="mb-2"><strong>Initial Issue Description:</strong></p>
                     <div class="p-3 rounded-3 mb-3" style="background-color: var(--ff-pastel-bg); white-space: pre-line;">{{ ticket['description'] }}</div>
 
                     {% if ticket['attachment'] %}
@@ -49,20 +50,43 @@
                     {% endif %}
 
                     <hr>
-                    <p class="mb-1"><strong>IT Support Update / Resolution Notes:</strong></p>
-                    <div class="p-3 bg-light rounded-3 mb-4">
-                        {{ ticket['resolution_notes'] if ticket['resolution_notes'] else 'Your ticket is in our queue. An IDL IT officer will update this shortly.' }}
-                    </div>
+                    <p class="mb-2"><strong>Conversation & Support Updates:</strong></p>
+                    {% if messages %}
+                        <div class="d-flex flex-column gap-2 mb-4">
+                            {% for m in messages %}
+                            <div class="p-3 rounded-3 border" style="background-color: {{ '#f0fafc' if m['sender_role'] == 'IT Support' else '#fffdf5' }}; border-left: 4px solid {{ '#398897' if m['sender_role'] == 'IT Support' else '#EB7B00' }} !important;">
+                                <div class="d-flex justify-content-between align-items-center small mb-1">
+                                    <span>
+                                        <strong>{{ m['sender_name'] }}</strong>
+                                        {% if m['status_change'] %}
+                                        <span class="badge bg-secondary ms-1">{{ m['status_change'] }}</span>
+                                        {% endif %}
+                                    </span>
+                                    <span class="text-muted">{{ m['created_at'] }}</span>
+                                </div>
+                                <div class="small" style="white-space: pre-line;">{{ m['message'] }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="p-3 bg-light rounded-3 mb-4 small text-muted">
+                            Your ticket is in our queue. An IDL IT officer will post an update here shortly.
+                        </div>
+                    {% endif %}
 
                     {% if ticket['status'] != 'Resolved' %}
                     <hr>
                     <form method="POST" action="{{ url_for('track_reply') }}">
                         <input type="hidden" name="ticket_code" value="{{ ticket['ticket_code'] }}">
                         <input type="hidden" name="staff_email" value="{{ ticket['staff_email'] }}">
-                        <label class="form-label fw-semibold">Need to Add Extra Information for IT?</label>
+                        <label class="form-label fw-semibold">Add a Follow-Up Message for IT</label>
                         <textarea name="followup_note" class="form-control mb-2" rows="2" placeholder="Share an update or answer an IT question..." required></textarea>
                         <button type="submit" class="btn btn-sm btn-ff-green">Send Follow-Up to IT</button>
                     </form>
+                    {% else %}
+                    <div class="alert alert-success small mb-0">
+                        This ticket has been marked <strong>Resolved</strong>. If you experience a new issue, please log a new ticket on the home page.
+                    </div>
                     {% endif %}
                 </div>
             </div>

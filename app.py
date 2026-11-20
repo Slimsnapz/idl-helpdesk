@@ -414,32 +414,47 @@ def index():
         message_id=staff_thread_id,
     )
 
-    return render_template(
-        "index.html", submitted_code=ticket_code, staff_email=staff_email
-    )
+    # Post/Redirect/Get: store one-time confirmation in session and redirect to GET /
+    session["submitted_ticket"] = {
+        "code": ticket_code,
+        "email": staff_email,
+    }
+    return redirect(url_for("index"))
 
-  return render_template("index.html")
+  submitted = session.pop("submitted_ticket", None)
+  return render_template(
+      "index.html",
+      submitted_code=submitted["code"] if submitted else None,
+      staff_email=submitted["email"] if submitted else None,
+  )
 
 
 @app.route("/track", methods=["GET", "POST"])
 def track():
+  if request.method == "POST":
+    ticket_code = request.form["ticket_code"].strip().upper()
+    staff_email = request.form["staff_email"].strip().lower()
+    session["track_lookup"] = {"code": ticket_code, "email": staff_email}
+    return redirect(url_for("track"))
+
   ticket = None
   messages = []
   searched = False
-  if request.method == "POST":
+  lookup = session.pop("track_lookup", None)
+
+  if lookup:
     searched = True
-    ticket_code = request.form["ticket_code"].strip().upper()
-    staff_email = request.form["staff_email"].strip().lower()
     db = get_db()
     ticket = db.execute(
         "SELECT * FROM tickets WHERE ticket_code = ? AND staff_email = ?",
-        (ticket_code, staff_email),
+        (lookup["code"], lookup["email"]),
     ).fetchone()
     if ticket:
       messages = db.execute(
           "SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC",
           (ticket["id"],),
       ).fetchall()
+
   return render_template(
       "track.html", ticket=ticket, messages=messages, searched=searched
   )
@@ -495,16 +510,8 @@ def track_reply():
     )
 
     flash("Your follow-up note has been added to the ticket thread.", "success")
-    ticket = db.execute(
-        "SELECT * FROM tickets WHERE id = ?", (ticket["id"],)
-    ).fetchone()
-    messages = db.execute(
-        "SELECT * FROM ticket_messages WHERE ticket_id = ? ORDER BY id ASC",
-        (ticket["id"],),
-    ).fetchall()
-    return render_template(
-        "track.html", ticket=ticket, messages=messages, searched=True
-    )
+    session["track_lookup"] = {"code": ticket_code, "email": staff_email}
+    return redirect(url_for("track"))
 
   flash("Could not submit follow-up note. Please verify your details.", "danger")
   return redirect(url_for("track"))
@@ -577,7 +584,6 @@ def admin():
     t["messages"] = []
     tickets.append(t)
 
-  # Load conversation thread messages for all displayed tickets
   if tickets:
     ticket_ids = [t["id"] for t in tickets]
     placeholders = ",".join("?" for _ in ticket_ids)
@@ -730,7 +736,6 @@ def update_ticket(ticket_id):
         (new_status, latest_note, now, resolved_at, ticket_id),
     )
 
-    # Record entry in the chronological thread
     thread_msg = (
         resolution_notes
         if resolution_notes
@@ -745,7 +750,6 @@ def update_ticket(ticket_id):
     )
     db.commit()
 
-    # Keep all status updates inside the same staff email thread
     track_url = url_for("track", _external=True)
     staff_subject = (
         f"Re: [{ticket['ticket_code']}] IDL IT Support — {ticket['category']}"

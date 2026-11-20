@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header card-header-ff py-3 px-4">
+                <h5 class="mb-0">Track Your IT Ticket</h5>
+                <small class="opacity-75">Enter your Ticket Reference ID and work email to view live progress.</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ticket Reference ID *</label>
+                        <input type="text" name="ticket_code" class="form-control" placeholder="e.g. IDL-1001" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Work Email Used *</label>
+                        <input type="email" name="staff_email" class="form-control" placeholder="name@idlgroup.com.ng" required>
+                    </div>
+                    <button type="submit" class="btn btn-ff-primary w-100 py-2">Check Status</button>
+                </form>
+            </div>
+        </div>
+
+        {% if searched %}
+            {% if ticket %}
+            <div class="card">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">{{ ticket['ticket_code'] }} — {{ ticket['category'] }}</h5>
+                        <span class="badge {{ 'badge-ff-resolved' if ticket['status'] == 'Resolved' else ('badge-ff-progress' if ticket['status'] == 'In Progress' else 'badge-ff-open') }}">
+                            {{ ticket['status'] }}
+                        </span>
+                    </div>
+                    <p class="text-muted small mb-3">Submitted: {{ ticket['created_at'] }} • Last Updated: {{ ticket['updated_at'] }}</p>
+                    <p class="mb-2"><strong>Issue Reported:</strong></p>
+                    <p class="p-3 rounded-3 mb-3" style="background-color: var(--ff-pastel-bg);">{{ ticket['description'] }}</p>
+
+                    {% if ticket['attachment'] %}
+                    <div class="mb-3">
+                        <small class="text-muted d-block mb-1 fw-semibold">Attached Screenshot / Photo (click to enlarge):</small>
+                        <a href="{{ url_for('static', filename='uploads/' + ticket['attachment']) }}" target="_blank">
+                            <img src="{{ url_for('static', filename='uploads/' + ticket['attachment']) }}" 
+                                 alt="Ticket Attachment" 
+                                 class="img-thumbnail" 
+                                 style="max-height: 180px; border-radius: 10px;">
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <hr>
+                    <p class="mb-1"><strong>IT Support Update / Resolution Notes:</strong></p>
+                    <div class="p-3 bg-light rounded-3">
+                        {{ ticket['resolution_notes'] if ticket['resolution_notes'] else 'Your ticket is in our queue. An IDL IT officer will update this shortly.' }}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="alert alert-danger border-0 shadow-sm">No matching ticket found. Double-check your Ticket ID and email address.</div>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

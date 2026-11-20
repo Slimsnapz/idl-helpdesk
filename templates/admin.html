@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h4 class="mb-0" style="color: var(--ff-primary);">IDL IT Support Command Center</h4>
+        <small class="text-muted">Live operations monitor across all Integrated Dairies Limited branches</small>
+    </div>
+    <div class="d-flex gap-2">
+        <form method="POST" action="{{ url_for('test_email') }}">
+            <button type="submit" class="btn btn-sm {{ 'btn-outline-success' if mail_enabled else 'btn-outline-secondary' }}">
+                {{ 'Test Email Alerts (Active)' if mail_enabled else 'Test Email Alerts (Off)' }}
+            </button>
+        </form>
+        <a href="{{ url_for('export_csv', status=status_filter, location=location_filter, category=category_filter) }}" class="btn btn-sm btn-ff-primary">
+            Export CSV Report
+        </a>
+    </div>
+</div>
+
+<!-- Top Operational KPIs -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-2">
+        <div class="card stat-total p-3 h-100">
+            <small class="text-muted fw-semibold">Total Tickets</small>
+            <h3 class="mb-0" style="color: var(--ff-primary);">{{ stats.total }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-open p-3 h-100">
+            <small class="text-muted fw-semibold">Open Queue</small>
+            <h3 class="mb-0" style="color: #b8862d;">{{ stats.open }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-progress p-3 h-100">
+            <small class="text-muted fw-semibold">In Progress</small>
+            <h3 class="mb-0" style="color: var(--ff-mango);">{{ stats.in_progress }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card stat-resolved p-3 h-100">
+            <small class="text-muted fw-semibold">Resolved</small>
+            <h3 class="mb-0" style="color: var(--ff-pineapple);">{{ stats.resolved }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card p-3 h-100" style="border-left: 5px solid var(--ff-strawberry);">
+            <small class="text-muted fw-semibold">Active Urgent</small>
+            <h3 class="mb-0" style="color: var(--ff-strawberry);">{{ stats.urgent_active }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card p-3 h-100" style="border-left: 5px solid var(--ff-vanilla);">
+            <small class="text-muted fw-semibold">Avg Resolution</small>
+            <h3 class="mb-0" style="color: var(--ff-vanilla);">{{ stats.avg_resolution }}</h3>
+        </div>
+    </div>
+</div>
+
+<!-- Visual Analytics Breakdown -->
+{% if stats.total > 0 %}
+<div class="row g-3 mb-4">
+    <!-- Tickets by Location -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-white py-2 px-3 fw-bold" style="color: var(--ff-primary);">
+                Tickets by Branch / Location
+            </div>
+            <div class="card-body p-3">
+                {% for loc in location_stats %}
+                {% set pct = ((loc['total'] / stats.total) * 100) | round | int %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="fw-semibold">{{ loc['location'] }}</span>
+                        <span class="text-muted">{{ loc['total'] }} total ({{ loc['active'] }} active)</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" style="width: {{ pct }}%; background-color: var(--ff-primary);"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Tickets by Issue Category -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header bg-white py-2 px-3 fw-bold" style="color: var(--ff-primary);">
+                Top Issue Categories
+            </div>
+            <div class="card-body p-3">
+                {% for cat in category_stats %}
+                {% set pct = ((cat['total'] / stats.total) * 100) | round | int %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span class="fw-semibold">{{ cat['category'] }}</span>
+                        <span class="text-muted">{{ cat['total'] }} ({{ pct }}%)</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" style="width: {{ pct }}%; background-color: var(--ff-pineapple);"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Filters -->
+<form method="GET" class="row g-2 mb-4 bg-white p-3 rounded-4 shadow-sm">
+    <div class="col-md-3">
+        <select name="status" class="form-select">
+            <option value="All" {% if status_filter == 'All' %}selected{% endif %}>All Statuses</option>
+            <option value="Open" {% if status_filter == 'Open' %}selected{% endif %}>Open</option>
+            <option value="In Progress" {% if status_filter == 'In Progress' %}selected{% endif %}>In Progress</option>
+            <option value="Resolved" {% if status_filter == 'Resolved' %}selected{% endif %}>Resolved</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="location" class="form-select">
+            <option value="All">All Locations</option>
+            {% for loc in locations %}
+            <option value="{{ loc }}" {% if location_filter == loc %}selected{% endif %}>{{ loc }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="category" class="form-select">
+            <option value="All">All Categories</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if category_filter == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-ff-primary w-100">Filter</button>
+        <a href="{{ url_for('admin') }}" class="btn btn-outline-secondary">Reset</a>
+    </div>
+</form>
+
+<!-- Tickets List -->
+{% for t in tickets %}
+<div class="card mb-3 {{ 'border border-danger' if t['is_overdue'] else '' }}">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-start mb-2">
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+                <span class="badge bg-dark">{{ t['ticket_code'] }}</span>
+                <span class="badge {{ 'badge-ff-high' if t['priority'] == 'High' else ('badge-ff-medium' if t['priority'] == 'Medium' else 'badge-ff-low') }}">{{ t['priority'] }}</span>
+                <span class="badge badge-ff-location">{{ t['location'] }}</span>
+                <span class="badge {{ 'badge-ff-resolved' if t['status'] == 'Resolved' else ('badge-ff-progress' if t['status'] == 'In Progress' else 'badge-ff-open') }}">{{ t['status'] }}</span>
+                {% if t['is_overdue'] %}
+                <span class="badge bg-danger">Overdue ({{ t['hours_open'] }}h open)</span>
+                {% endif %}
+                {% if t['asset_tag'] %}
+                <span class="badge bg-light text-dark border">Asset: {{ t['asset_tag'] }}</span>
+                    {% if repeat_assets.get(t['asset_tag']) %}
+                    <span class="badge" style="background-color: var(--ff-vanilla); color: #fff;">Repeat Asset ({{ repeat_assets[t['asset_tag']] }}x)</span>
+                    {% endif %}
+                {% endif %}
+                <strong class="ms-2">{{ t['category'] }}</strong>
+            </div>
+            <small class="text-muted">Logged: {{ t['created_at'] }}{% if t['resolved_at'] %} • Resolved: {{ t['resolved_at'] }}{% endif %}</small>
+        </div>
+
+        <p class="mb-2"><strong>{{ t['staff_name'] }}</strong> <span class="text-muted">({{ t['department'] }} • {{ t['staff_email'] }})</span></p>
+        <p class="p-3 rounded-3 mb-3" style="background-color: var(--ff-pastel-bg);">{{ t['description'] }}</p>
+
+        {% if t['attachment'] %}
+        <div class="mb-3">
+            <small class="text-muted d-block mb-1 fw-semibold">Attached Screenshot / Photo (click to enlarge):</small>
+            <a href="{{ url_for('static', filename='uploads/' + t['attachment']) }}" target="_blank">
+                <img src="{{ url_for('static', filename='uploads/' + t['attachment']) }}" 
+                     alt="Ticket Attachment" 
+                     class="img-thumbnail" 
+                     style="max-height: 180px; border-radius: 10px;">
+            </a>
+        </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('update_ticket', ticket_id=t['id']) }}" class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="Open" {% if t['status'] == 'Open' %}selected{% endif %}>Open</option>
+                    <option value="In Progress" {% if t['status'] == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Resolved" {% if t['status'] == 'Resolved' %}selected{% endif %}>Resolved</option>
+                </select>
+            </div>
+            <div class="col-md-7">
+                <input type="text" name="resolution_notes" class="form-control form-control-sm" placeholder="Add resolution update for staff..." value="{{ t['resolution_notes'] }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-ff-green w-100">Save Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% else %}
+<div class="card p-4 text-center text-muted">No tickets match the selected filters.</div>
+{% endfor %}
+{% endblock %}

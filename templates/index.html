@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        {% if submitted_code %}
+        <div class="alert alert-success border-0 shadow-sm p-4 mb-4">
+            <h4 class="alert-heading">We've got your ticket!</h4>
+            <p class="mb-2">Your Ticket ID is <strong class="fs-4">{{ submitted_code }}</strong>. Sit tight—our IT team is on it.</p>
+            <p class="mb-0">Check live progress anytime on the <a href="{{ url_for('track') }}" class="alert-link">Track Ticket</a> page using <strong>{{ submitted_code }}</strong> and <strong>{{ staff_email }}</strong>.</p>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header card-header-ff py-3 px-4">
+                <h5 class="mb-0">Having a Tech Hiccup? Let’s Fix It!</h5>
+                <small class="opacity-75">Integrated Dairies Limited (IDL) IT Helpdesk — tell us what’s slowing you down and we’ll get you back up and running.</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Full Name *</label>
+                            <input type="text" name="staff_name" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Work Email *</label>
+                            <input type="email" name="staff_email" class="form-control" placeholder="name@idlgroup.com.ng" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Location / Branch *</label>
+                            <select name="location" class="form-select" required>
+                                <option value="">-- Select Your Location --</option>
+                                <option>Jos HQ (6 Keana Road)</option>
+                                <option>Jos Plant / Dairy</option>
+                                <option>Abuja Regional Office</option>
+                                <option>Lagos Regional Office</option>
+                                <option>Kano Depot</option>
+                                <option>Field / Sales / Remote</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Department *</label>
+                            <input type="text" name="department" class="form-control" placeholder="e.g. Production, Sales, Accounts, Supply Chain" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Device Asset Tag</label>
+                            <input type="text" name="asset_tag" class="form-control" placeholder="e.g. IDL-LAP-014">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Issue Category *</label>
+                            <select name="category" class="form-select" required>
+                                <option>Laptop / Desktop Hardware</option>
+                                <option>Network / Internet / Wi-Fi</option>
+                                <option>ERP / Business Software</option>
+                                <option>Email / Google Workspace / Account</option>
+                                <option>Printer / Scanner / POS</option>
+                                <option>Mobile Phone / Tablet</option>
+                                <option>Other IT Issue</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">How Urgent Is This? *</label>
+                            <select name="priority" class="form-select" required>
+                                <option value="Low">Low (Minor hiccup)</option>
+                                <option value="Medium" selected>Medium (Slowing me down)</option>
+                                <option value="High">High (Work completely stopped)</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">What Happened? *</label>
+                            <textarea name="description" class="form-control" rows="4" placeholder="Share any error messages or details so we can solve it faster..." required></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Attach Screenshot or Photo (Optional)</label>
+                            <input type="file" name="screenshot" class="form-control" accept="image/png, image/jpeg, image/gif, image/webp">
+                            <div class="form-text">Upload a clear screenshot of the error or a photo of the device (Max 5 MB — PNG, JPG, WEBP).</div>
+                        </div>
+                        <div class="col-12 pt-2">
+                            <button type="submit" class="btn btn-ff-primary px-4 py-2">Send to IDL IT Support</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

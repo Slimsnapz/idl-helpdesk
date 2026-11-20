@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap');
+
+:root {
+    --ff-primary: #398897;       /* Pantone 2221C - Major Brand Colour */
+    --ff-primary-dark: #2b6a76;
+    --ff-pastel-bg: #E9FCFF;     /* Official Pastel Blue Backdrop */
+    --ff-pineapple: #56AF00;     /* Resolved / Success */
+    --ff-strawberry: #E02674;    /* High Priority / Urgent */
+    --ff-mango: #EB7B00;         /* In Progress / Warning */
+    --ff-banana: #E6B35A;        /* Open / Pending */
+    --ff-vanilla: #68266C;       /* Asset / Low Priority */
+}
+
+body {
+    background-color: var(--ff-pastel-bg);
+    font-family: 'Nunito', 'Segoe UI', sans-serif;
+    color: #1f2d3d;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, .navbar-brand {
+    font-family: 'Fredoka', 'Nunito', sans-serif;
+    letter-spacing: 0.2px;
+}
+
+/* Navbar */
+.navbar-farmfresh {
+    background-color: var(--ff-primary);
+    border-bottom: 4px solid var(--ff-pineapple);
+}
+
+.navbar-brand img {
+    height: 42px;
+    width: auto;
+    background: #ffffff;
+    padding: 3px 8px;
+    border-radius: 8px;
+}
+
+/* Buttons */
+.btn-ff-primary {
+    background-color: var(--ff-primary);
+    border-color: var(--ff-primary);
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 8px;
+}
+
+.btn-ff-primary:hover {
+    background-color: var(--ff-primary-dark);
+    border-color: var(--ff-primary-dark);
+    color: #ffffff;
+}
+
+.btn-ff-green {
+    background-color: var(--ff-pineapple);
+    border-color: var(--ff-pineapple);
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 8px;
+}
+
+.btn-ff-green:hover {
+    background-color: #468f00;
+    color: #ffffff;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(57, 136, 151, 0.08);
+}
+
+.card-header-ff {
+    background-color: var(--ff-primary);
+    color: #ffffff;
+    border-radius: 14px 14px 0 0 !important;
+}
+
+/* Brand Badges */
+.badge-ff-open { background-color: var(--ff-banana); color: #2b2100; }
+.badge-ff-progress { background-color: var(--ff-mango); color: #ffffff; }
+.badge-ff-resolved { background-color: var(--ff-pineapple); color: #ffffff; }
+.badge-ff-high { background-color: var(--ff-strawberry); color: #ffffff; }
+.badge-ff-medium { background-color: var(--ff-mango); color: #ffffff; }
+.badge-ff-low { background-color: var(--ff-vanilla); color: #ffffff; }
+.badge-ff-location { background-color: var(--ff-primary); color: #ffffff; }
+
+/* Stat Cards */
+.stat-total { border-left: 5px solid var(--ff-primary); }
+.stat-open { border-left: 5px solid var(--ff-banana); }
+.stat-progress { border-left: 5px solid var(--ff-mango); }
+.stat-resolved { border-left: 5px solid var(--ff-pineapple); }
+
+/* Form Focus */
+.form-control:focus, .form-select:focus {
+    border-color: var(--ff-primary);
+    box-shadow: 0 0 0 0.2rem rgba(57, 136, 151, 0.2);
+}
+
+/* Footer */
+.footer-ff {
+    margin-top: auto;
+    background-color: var(--ff-primary);
+    color: #ffffff;
+    font-size: 0.85rem;
+}
